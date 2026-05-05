@@ -1,107 +1,159 @@
 package mp3player;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Fachklasse Playlist – enthält eine geordnete Liste von Songs.
- * Assoziation: Playlist hat eine ArrayList von Song-Objekten (1 zu *).
+ * Repräsentiert eine Playlist mit mehreren Songs.
  */
 public class Playlist {
 
-    private String        name;
-    private ArrayList<Song> songs;   // ArrayList als geforderter Container
+    private String name;
+    private final ArrayList<Song> songs;
 
     public Playlist(String name) {
-        this.name  = name;
+        setName(name);
         this.songs = new ArrayList<>();
     }
 
-    public String getName()               { return name; }
-    public void   setName(String name)    { this.name = name; }
-
-    public ArrayList<Song> getSongs()     { return songs; }
-
-    /** Fügt einen Song hinzu. */
-    public void addSong(Song s) {
-        songs.add(s);
+    public String getName() {
+        return name;
     }
 
-    /** Entfernt Song anhand der ID. Gibt true zurück wenn erfolgreich. */
+    public void setName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Der Playlist-Name darf nicht leer sein.");
+        }
+        this.name = name.trim();
+    }
+
+    public ArrayList<Song> getSongs() {
+        return songs;
+    }
+
+    public List<Song> getSongsReadOnly() {
+        return Collections.unmodifiableList(songs);
+    }
+
+    public boolean addSong(Song song) {
+        if (song == null) {
+            return false;
+        }
+
+        if (findById(song.getId()) != null) {
+            return false;
+        }
+
+        songs.add(song);
+        return true;
+    }
+
     public boolean removeSongById(int id) {
-        return songs.removeIf(s -> s.getId() == id);
+        return songs.removeIf(song -> song.getId() == id);
     }
 
-    /** Sucht Song anhand der ID. Methode mit Rückgabewert (3). */
     public Song findById(int id) {
-        for (Song s : songs) {          // Schleife
-            if (s.getId() == id) return s;
+        for (Song song : songs) {
+            if (song.getId() == id) {
+                return song;
+            }
         }
         return null;
     }
 
-    /** Sucht Songs anhand eines Suchbegriffs. Methode mit Rückgabewert (4). */
     public List<Song> search(String query) {
         List<Song> result = new ArrayList<>();
-        for (Song s : songs) {          // Schleife + Verzweigung
-            if (s.matches(query)) result.add(s);
+
+        if (query == null || query.isBlank()) {
+            return result;
         }
+
+        for (Song song : songs) {
+            if (song.matches(query)) {
+                result.add(song);
+            }
+        }
+
         return result;
     }
 
-    // --- Statistische Methoden mit Rückgabewert ---
-
-    /** Gesamtdauer der Playlist in Sekunden. */
     public int getTotalDurationSeconds() {
         int total = 0;
-        for (Song s : songs) total += s.getDurationSeconds();
+
+        for (Song song : songs) {
+            total += song.getDurationSeconds();
+        }
+
         return total;
     }
 
-    /** Gesamtdauer formatiert. */
     public String getTotalDurationFormatted() {
         int total = getTotalDurationSeconds();
-        int h   = total / 3600;
-        int min = (total % 3600) / 60;
-        int sec = total % 60;
-        return String.format("%02d:%02d:%02d", h, min, sec);
+        int hours = total / 3600;
+        int minutes = (total % 3600) / 60;
+        int seconds = total % 60;
+
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
-    /** Durchschnittliche Song-Dauer in Sekunden. */
     public double getAverageDurationSeconds() {
-        if (songs.isEmpty()) return 0.0;
+        if (songs.isEmpty()) {
+            return 0.0;
+        }
+
         return (double) getTotalDurationSeconds() / songs.size();
     }
 
-    /** Kürzester Song. */
     public Song getShortestSong() {
-        if (songs.isEmpty()) return null;
-        Song min = songs.get(0);
-        for (Song s : songs) {
-            if (s.getDurationSeconds() < min.getDurationSeconds()) min = s;
+        if (songs.isEmpty()) {
+            return null;
         }
-        return min;
+
+        Song shortest = songs.get(0);
+
+        for (Song song : songs) {
+            if (song.getDurationSeconds() < shortest.getDurationSeconds()) {
+                shortest = song;
+            }
+        }
+
+        return shortest;
     }
 
-    /** Längster Song. */
     public Song getLongestSong() {
-        if (songs.isEmpty()) return null;
-        Song max = songs.get(0);
-        for (Song s : songs) {
-            if (s.getDurationSeconds() > max.getDurationSeconds()) max = s;
+        if (songs.isEmpty()) {
+            return null;
         }
-        return max;
+
+        Song longest = songs.get(0);
+
+        for (Song song : songs) {
+            if (song.getDurationSeconds() > longest.getDurationSeconds()) {
+                longest = song;
+            }
+        }
+
+        return longest;
     }
 
-    /** Nächste freie ID (max + 1). */
     public int nextId() {
         int max = 0;
-        for (Song s : songs) {
-            if (s.getId() > max) max = s.getId();
+
+        for (Song song : songs) {
+            if (song.getId() > max) {
+                max = song.getId();
+            }
         }
+
         return max + 1;
     }
 
-    /** Anzahl Songs. */
-    public int size() { return songs.size(); }
+    public int size() {
+        return songs.size();
+    }
+
+    public boolean isEmpty() {
+        return songs.isEmpty();
+    }
 }

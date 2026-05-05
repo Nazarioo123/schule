@@ -1,103 +1,196 @@
 package mp3player;
 
+import java.util.Objects;
+
 /**
- * Fachklasse Song – repräsentiert einen einzelnen Song im MP3-Player.
- * Assoziation: wird von Playlist verwaltet.
+ * Repräsentiert einen einzelnen Song im MP3-Player.
  */
 public class Song {
 
-    // --- Attribute ---
-    private int    id;
+    private int id;
     private String title;
     private String artist;
     private String album;
-    private int    durationSeconds; // Länge in Sekunden
+    private int durationSeconds;
     private String genre;
-    private int    year;
+    private int year;
 
-    // --- Konstruktoren ---
     public Song(int id, String title, String artist, String album,
                 int durationSeconds, String genre, int year) {
-        this.id              = id;
-        this.title           = title;
-        this.artist          = artist;
-        this.album           = album;
+
+        if (id <= 0) {
+            throw new IllegalArgumentException("Die Song-ID muss größer als 0 sein.");
+        }
+
+        if (durationSeconds < 0) {
+            throw new IllegalArgumentException("Die Dauer darf nicht negativ sein.");
+        }
+
+        this.id = id;
+        this.title = normalize(title);
+        this.artist = normalize(artist);
+        this.album = normalize(album);
         this.durationSeconds = durationSeconds;
-        this.genre           = genre;
-        this.year            = year;
+        this.genre = normalize(genre);
+        this.year = year;
     }
 
-    // --- Getter & Setter ---
-    public int    getId()              { return id; }
-    public void   setId(int id)        { this.id = id; }
+    public int getId() {
+        return id;
+    }
 
-    public String getTitle()           { return title; }
-    public void   setTitle(String t)   { this.title = t; }
+    public void setId(int id) {
+        if (id <= 0) {
+            throw new IllegalArgumentException("Die Song-ID muss größer als 0 sein.");
+        }
+        this.id = id;
+    }
 
-    public String getArtist()          { return artist; }
-    public void   setArtist(String a)  { this.artist = a; }
+    public String getTitle() {
+        return title;
+    }
 
-    public String getAlbum()           { return album; }
-    public void   setAlbum(String a)   { this.album = a; }
+    public void setTitle(String title) {
+        this.title = normalize(title);
+    }
 
-    public int    getDurationSeconds()        { return durationSeconds; }
-    public void   setDurationSeconds(int d)   { this.durationSeconds = d; }
+    public String getArtist() {
+        return artist;
+    }
 
-    public String getGenre()           { return genre; }
-    public void   setGenre(String g)   { this.genre = g; }
+    public void setArtist(String artist) {
+        this.artist = normalize(artist);
+    }
 
-    public int    getYear()            { return year; }
-    public void   setYear(int y)       { this.year = y; }
+    public String getAlbum() {
+        return album;
+    }
 
-    /**
-     * Gibt die Dauer im Format mm:ss zurück.
-     * Methode mit Rückgabewert (1).
-     */
+    public void setAlbum(String album) {
+        this.album = normalize(album);
+    }
+
+    public int getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(int durationSeconds) {
+        if (durationSeconds < 0) {
+            throw new IllegalArgumentException("Die Dauer darf nicht negativ sein.");
+        }
+        this.durationSeconds = durationSeconds;
+    }
+
+    public String getGenre() {
+        return genre;
+    }
+
+    public void setGenre(String genre) {
+        this.genre = normalize(genre);
+    }
+
+    public int getYear() {
+        return year;
+    }
+
+    public void setYear(int year) {
+        this.year = year;
+    }
+
     public String getFormattedDuration() {
-        int min = durationSeconds / 60;
-        int sec = durationSeconds % 60;
-        return String.format("%02d:%02d", min, sec);
+        int minutes = durationSeconds / 60;
+        int seconds = durationSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
     }
 
-    /**
-     * Prüft, ob der Song einem Suchbegriff entspricht (Titel oder Künstler).
-     * Methode mit Rückgabewert (2) – boolean.
-     */
     public boolean matches(String query) {
-        if (query == null || query.isBlank()) return false;
-        String q = query.toLowerCase();
+        if (query == null || query.isBlank()) {
+            return false;
+        }
+
+        String q = query.trim().toLowerCase();
+
         return title.toLowerCase().contains(q)
-            || artist.toLowerCase().contains(q)
-            || album.toLowerCase().contains(q);
+                || artist.toLowerCase().contains(q)
+                || album.toLowerCase().contains(q)
+                || genre.toLowerCase().contains(q)
+                || String.valueOf(year).contains(q);
     }
 
-    /** CSV-Zeile: id;title;artist;album;durationSeconds;genre;year */
     public String toCsv() {
-        return id + ";" + escapeCsv(title) + ";" + escapeCsv(artist) + ";"
-             + escapeCsv(album) + ";" + durationSeconds + ";"
-             + escapeCsv(genre) + ";" + year;
+        return id + ";"
+                + escape(title) + ";"
+                + escape(artist) + ";"
+                + escape(album) + ";"
+                + durationSeconds + ";"
+                + escape(genre) + ";"
+                + year;
     }
 
-    /** Erstellt Song-Objekt aus einer CSV-Zeile. */
     public static Song fromCsv(String line) {
-        String[] p = line.split(";", -1);
-        if (p.length < 7) throw new IllegalArgumentException("Ungültige CSV-Zeile: " + line);
-        return new Song(
-            Integer.parseInt(p[0].trim()),
-            p[1], p[2], p[3],
-            Integer.parseInt(p[4].trim()),
-            p[5],
-            Integer.parseInt(p[6].trim())
-        );
+        if (line == null || line.isBlank()) {
+            throw new IllegalArgumentException("Leere CSV-Zeile.");
+        }
+
+        String[] parts = line.split(";", -1);
+
+        if (parts.length != 7) {
+            throw new IllegalArgumentException("Ungültige CSV-Zeile: " + line);
+        }
+
+        try {
+            int id = Integer.parseInt(parts[0].trim());
+            String title = parts[1].trim();
+            String artist = parts[2].trim();
+            String album = parts[3].trim();
+            int durationSeconds = Integer.parseInt(parts[4].trim());
+            String genre = parts[5].trim();
+            int year = Integer.parseInt(parts[6].trim());
+
+            return new Song(id, title, artist, album, durationSeconds, genre, year);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Ungültige Zahl in CSV-Zeile: " + line, e);
+        }
     }
 
-    private String escapeCsv(String s) {
-        return s == null ? "" : s.replace(";", ",");
+    private static String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return "Unknown";
+        }
+        return value.trim();
+    }
+
+    private static String escape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace(";", ",").trim();
     }
 
     @Override
     public String toString() {
-        return String.format("[%3d] %-30s | %-20s | %-20s | %s | %-10s | %d",
-            id, title, artist, album, getFormattedDuration(), genre, year);
+        return String.format(
+                "[%3d] %-25s | %-20s | %-20s | %s | %-10s | %d",
+                id,
+                title,
+                artist,
+                album,
+                getFormattedDuration(),
+                genre,
+                year
+        );
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Song song)) {
+            return false;
+        }
+        return id == song.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }

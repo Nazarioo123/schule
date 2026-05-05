@@ -1,277 +1,334 @@
 package mp3player;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
-/**
- * Hauptklasse MP3PlayerApp – enthält main()-Methode und Menüführung.
- * Verwaltet eine Playlist und einen CsvStorage.
- * Assoziation: nutzt Playlist, CsvStorage, Song.
- */
 public class MP3PlayerApp {
 
-    private static final String CSV_FILE = "songs.csv";
-    private static Playlist    playlist;
-    private static CsvStorage  storage;
-    private static Scanner     scanner;
+    private static final String SONG_FILE = "songs.csv";
+    private static final String PLAYLIST_FILE = "playlist.csv";
+
+    private static CsvStorage storage;
+    private static Scanner scanner;
+
+    private static final Map<String, Playlist> playlists = new LinkedHashMap<>();
+    private static final List<Song> allSongs = new ArrayList<>();
+
+    private static Playlist currentPlaylist;
 
     public static void main(String[] args) {
-        storage  = new CsvStorage(CSV_FILE);
-        playlist = new Playlist("Meine Bibliothek");
-        scanner  = new Scanner(System.in);
+        storage = new CsvStorage(SONG_FILE, PLAYLIST_FILE);
+        scanner = new Scanner(System.in);
 
-        // Songs laden
-        List<Song> loaded = storage.loadSongs();
-        for (Song s : loaded) playlist.addSong(s);
+        loadData();
 
-        if (playlist.size() == 0) {
-            addSampleData();
-            storage.saveSongs(playlist);
+        if (playlists.isEmpty()) {
+            System.out.println("Keine Playlists gefunden. Standard-Playlist wird erstellt.");
+            currentPlaylist = createPlaylist("Default");
+            addSampleData(currentPlaylist);
         }
 
-        printBanner();
+        runMainMenu();
 
+        saveData();
+
+        System.out.println("Gespeichert. Bye!");
+    }
+
+    private static void loadData() {
+        allSongs.clear();
+        allSongs.addAll(storage.loadSongs());
+
+        Map<Integer, Song> songById = new LinkedHashMap<>();
+
+        for (Song song : allSongs) {
+            songById.put(song.getId(), song);
+        }
+
+        Map<String, List<Integer>> loadedPlaylists = storage.loadPlaylists();
+
+        playlists.clear();
+
+        for (Map.Entry<String, List<Integer>> entry : loadedPlaylists.entrySet()) {
+            Playlist playlist = new Playlist(entry.getKey());
+
+            for (Integer songId : entry.getValue()) {
+                Song song = songById.get(songId);
+
+                if (song != null) {
+                    playlist.addSong(song);
+                }
+            }
+
+            playlists.put(playlist.getName(), playlist);
+        }
+    }
+
+    private static void saveData() {
+        storage.saveSongs(allSongs);
+        storage.savePlaylists(playlists);
+    }
+
+    private static void runMainMenu() {
         boolean running = true;
-        while (running) {           // Hauptschleife
-            printMenu();
+
+        while (running) {
+            System.out.println("\n===== PLAYLIST AUSWAHL =====");
+            printPlaylists();
+
+            System.out.println("n = neue Playlist erstellen");
+            System.out.println("0 = Beenden");
+            System.out.print("Auswahl: ");
+
+            String input = scanner.nextLine().trim();
+
+            switch (input) {
+                case "0" -> running = false;
+                case "n" -> createPlaylistInteractive();
+                default -> openPlaylist(input);
+            }
+        }
+    }
+
+    private static void openPlaylist(String name) {
+        currentPlaylist = playlists.get(name);
+
+        if (currentPlaylist == null) {
+            System.out.println("Playlist nicht gefunden.");
+            return;
+        }
+
+        playlistMenu();
+    }
+
+    private static void playlistMenu() {
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=== Playlist: " + currentPlaylist.getName() + " ===");
+            System.out.println("1 = Songs anzeigen");
+            System.out.println("2 = Song hinzufügen");
+            System.out.println("3 = Song löschen");
+            System.out.println("4 = Song suchen");
+            System.out.println("5 = Statistik anzeigen");
+            System.out.println("0 = Zurück");
+            System.out.print("Auswahl: ");
+
             String choice = scanner.nextLine().trim();
 
-            switch (choice) {       // Verzweigung
-                case "1" -> showAllSongs();
-                case "2" -> searchSong();
-                case "3" -> addSong();
-                case "4" -> editSong();
-                case "5" -> deleteSong();
-                case "6" -> showStatistics();
+            switch (choice) {
+                case "1" -> showSongs();
+                case "2" -> addSongToPlaylist();
+                case "3" -> removeSongFromPlaylist();
+                case "4" -> searchSongs();
+                case "5" -> showStatistics();
                 case "0" -> running = false;
-                default  -> System.out.println("  Ungültige Eingabe. Bitte 0-6 eingeben.");
+                default -> System.out.println("Ungültige Auswahl.");
             }
         }
-
-        storage.saveSongs(playlist);
-        System.out.println("\n  Auf Wiedersehen! Songs gespeichert in: " + CSV_FILE);
-        scanner.close();
     }
 
-    // ---------------------------------------------------------------
-    // MENÜ
-    // ---------------------------------------------------------------
-    private static void printBanner() {
-        System.out.println();
-        System.out.println("╔══════════════════════════════════════════╗");
-        System.out.println("║        🎵  KONSOLEN MP3-PLAYER  🎵        ║");
-        System.out.println("╚══════════════════════════════════════════╝");
-        System.out.println("  Playlist: " + playlist.getName()
-                         + "  |  Songs geladen: " + playlist.size());
-        System.out.println();
-    }
-
-    private static void printMenu() {
-        System.out.println("\n──────────────── MENÜ ────────────────");
-        System.out.println("  1  Alle Songs anzeigen");
-        System.out.println("  2  Song suchen");
-        System.out.println("  3  Song hinzufügen");
-        System.out.println("  4  Song bearbeiten");
-        System.out.println("  5  Song löschen");
-        System.out.println("  6  Statistiken");
-        System.out.println("  0  Beenden");
-        System.out.println("──────────────────────────────────────");
-        System.out.print("Auswahl: ");
-    }
-
-    // ---------------------------------------------------------------
-    // 1 – ALLE SONGS ANZEIGEN
-    // ---------------------------------------------------------------
-    private static void showAllSongs() {
-        System.out.println("\n─── Alle Songs (" + playlist.size() + ") ───");
-        if (playlist.size() == 0) {
-            System.out.println("  Keine Songs vorhanden.");
+    private static void printPlaylists() {
+        if (playlists.isEmpty()) {
+            System.out.println("Keine Playlists vorhanden.");
             return;
         }
-        printTableHeader();
-        for (Song s : playlist.getSongs()) {    // Schleife
-            System.out.println("  " + s);
+
+        for (String name : playlists.keySet()) {
+            System.out.println("- " + name);
         }
-        System.out.println("  Gesamtdauer: " + playlist.getTotalDurationFormatted());
     }
 
-    // ---------------------------------------------------------------
-    // 2 – SUCHEN
-    // ---------------------------------------------------------------
-    private static void searchSong() {
-        System.out.print("\nSuchbegriff (Titel/Künstler/Album): ");
-        String q = scanner.nextLine().trim();
-        List<Song> results = playlist.search(q);
+    private static void createPlaylistInteractive() {
+        System.out.print("Name: ");
+        String name = scanner.nextLine().trim();
 
-        if (results.isEmpty()) {
-            System.out.println("  Keine Songs gefunden für: \"" + q + "\"");
+        if (name.isEmpty()) {
+            System.out.println("Der Playlist-Name darf nicht leer sein.");
+            return;
+        }
+
+        if (playlists.containsKey(name)) {
+            System.out.println("Diese Playlist existiert bereits.");
+            return;
+        }
+
+        createPlaylist(name);
+    }
+
+    private static Playlist createPlaylist(String name) {
+        Playlist playlist = new Playlist(name);
+        playlists.put(playlist.getName(), playlist);
+        System.out.println("Playlist erstellt: " + playlist.getName());
+        return playlist;
+    }
+
+    private static void showSongs() {
+        if (currentPlaylist == null) {
+            System.out.println("Keine Playlist ausgewählt.");
+            return;
+        }
+
+        if (currentPlaylist.isEmpty()) {
+            System.out.println("Diese Playlist enthält keine Songs.");
+            return;
+        }
+
+        for (Song song : currentPlaylist.getSongs()) {
+            System.out.println(song);
+        }
+    }
+
+    private static void addSongToPlaylist() {
+        if (currentPlaylist == null) {
+            System.out.println("Keine Playlist ausgewählt.");
+            return;
+        }
+
+        System.out.print("Titel: ");
+        String title = scanner.nextLine().trim();
+
+        System.out.print("Artist: ");
+        String artist = scanner.nextLine().trim();
+
+        System.out.print("Album: ");
+        String album = scanner.nextLine().trim();
+
+        int durationSeconds = readInt("Dauer in Sekunden: ", 0, Integer.MAX_VALUE);
+
+        System.out.print("Genre: ");
+        String genre = scanner.nextLine().trim();
+
+        int year = readInt("Jahr: ", 0, 9999);
+
+        int id = getNextGlobalSongId();
+
+        Song song = new Song(id, title, artist, album, durationSeconds, genre, year);
+
+        allSongs.add(song);
+        currentPlaylist.addSong(song);
+
+        System.out.println("Song hinzugefügt.");
+    }
+
+    private static void removeSongFromPlaylist() {
+        if (currentPlaylist == null) {
+            System.out.println("Keine Playlist ausgewählt.");
+            return;
+        }
+
+        int id = readInt("Song-ID: ", 1, Integer.MAX_VALUE);
+
+        boolean removed = currentPlaylist.removeSongById(id);
+
+        if (removed) {
+            System.out.println("Song aus Playlist entfernt.");
         } else {
-            System.out.println("  " + results.size() + " Ergebnis(se) für \"" + q + "\":");
-            printTableHeader();
-            for (Song s : results) System.out.println("  " + s);
+            System.out.println("Song-ID wurde in dieser Playlist nicht gefunden.");
         }
     }
 
-    // ---------------------------------------------------------------
-    // 3 – HINZUFÜGEN
-    // ---------------------------------------------------------------
-    private static void addSong() {
-        System.out.println("\n─── Neuen Song hinzufügen ───");
-        String title    = readNonEmpty("Titel:    ");
-        String artist   = readNonEmpty("Künstler: ");
-        String album    = readNonEmpty("Album:    ");
-        int    duration = readPositiveInt("Dauer (Sekunden): ");
-        String genre    = readNonEmpty("Genre:    ");
-        int    year     = readPositiveInt("Jahr:     ");
-
-        int id = playlist.nextId();
-        Song newSong = new Song(id, title, artist, album, duration, genre, year);
-        playlist.addSong(newSong);
-        storage.saveSongs(playlist);
-
-        System.out.println("  ✔ Song hinzugefügt: " + newSong);
-    }
-
-    // ---------------------------------------------------------------
-    // 4 – BEARBEITEN
-    // ---------------------------------------------------------------
-    private static void editSong() {
-        System.out.print("\nID des zu bearbeitenden Songs: ");
-        int id = readIntSafe();
-        Song song = playlist.findById(id);
-
-        if (song == null) {                     // Verzweigung
-            System.out.println("  Song mit ID " + id + " nicht gefunden.");
+    private static void searchSongs() {
+        if (currentPlaylist == null) {
+            System.out.println("Keine Playlist ausgewählt.");
             return;
         }
-        System.out.println("  Aktuell: " + song);
-        System.out.println("  (Leere Eingabe = unverändert)");
 
-        String title  = readOptional("Neuer Titel [" + song.getTitle() + "]: ");
-        String artist = readOptional("Neuer Künstler [" + song.getArtist() + "]: ");
-        String album  = readOptional("Neues Album [" + song.getAlbum() + "]: ");
-        String genre  = readOptional("Neues Genre [" + song.getGenre() + "]: ");
+        System.out.print("Suchbegriff: ");
+        String query = scanner.nextLine().trim();
 
-        System.out.print("Neue Dauer in Sekunden [" + song.getDurationSeconds() + "]: ");
-        String durStr = scanner.nextLine().trim();
-        System.out.print("Neues Jahr [" + song.getYear() + "]: ");
-        String yearStr = scanner.nextLine().trim();
+        List<Song> result = currentPlaylist.search(query);
 
-        if (!title.isEmpty())  song.setTitle(title);
-        if (!artist.isEmpty()) song.setArtist(artist);
-        if (!album.isEmpty())  song.setAlbum(album);
-        if (!genre.isEmpty())  song.setGenre(genre);
-        if (!durStr.isEmpty()) {
-            try { song.setDurationSeconds(Integer.parseInt(durStr)); }
-            catch (NumberFormatException e) { System.out.println("  Ungültige Dauer – unverändert."); }
-        }
-        if (!yearStr.isEmpty()) {
-            try { song.setYear(Integer.parseInt(yearStr)); }
-            catch (NumberFormatException e) { System.out.println("  Ungültiges Jahr – unverändert."); }
-        }
-
-        storage.saveSongs(playlist);
-        System.out.println("  ✔ Song aktualisiert: " + song);
-    }
-
-    // ---------------------------------------------------------------
-    // 5 – LÖSCHEN
-    // ---------------------------------------------------------------
-    private static void deleteSong() {
-        System.out.print("\nID des zu löschenden Songs: ");
-        int id = readIntSafe();
-        Song song = playlist.findById(id);
-
-        if (song == null) {
-            System.out.println("  Song mit ID " + id + " nicht gefunden.");
+        if (result.isEmpty()) {
+            System.out.println("Keine Treffer gefunden.");
             return;
         }
-        System.out.print("  Wirklich löschen? \"" + song.getTitle() + "\" (j/n): ");
-        String confirm = scanner.nextLine().trim().toLowerCase();
 
-        if (confirm.equals("j")) {              // Verzweigung
-            playlist.removeSongById(id);
-            storage.saveSongs(playlist);
-            System.out.println("  ✔ Song gelöscht.");
-        } else {
-            System.out.println("  Abgebrochen.");
+        for (Song song : result) {
+            System.out.println(song);
         }
     }
 
-    // ---------------------------------------------------------------
-    // 6 – STATISTIKEN
-    // ---------------------------------------------------------------
     private static void showStatistics() {
-        System.out.println("\n─── Statistiken ───");
-        System.out.println("  Anzahl Songs:          " + playlist.size());
-        System.out.println("  Gesamtdauer:           " + playlist.getTotalDurationFormatted());
-        System.out.printf ("  Ø Dauer pro Song:      %.1f Sekunden%n",
-                            playlist.getAverageDurationSeconds());
-
-        Song shortest = playlist.getShortestSong();
-        Song longest  = playlist.getLongestSong();
-
-        if (shortest != null) {
-            System.out.println("  Kürzester Song:        "
-                + shortest.getTitle() + " (" + shortest.getFormattedDuration() + ")");
+        if (currentPlaylist == null) {
+            System.out.println("Keine Playlist ausgewählt.");
+            return;
         }
-        if (longest != null) {
-            System.out.println("  Längster Song:         "
-                + longest.getTitle() + " (" + longest.getFormattedDuration() + ")");
-        }
-        System.out.println("  Datei:                 " + storage.getFilePath());
+
+        System.out.println("Anzahl Songs: " + currentPlaylist.size());
+        System.out.println("Gesamtdauer: " + currentPlaylist.getTotalDurationFormatted());
+        System.out.printf("Durchschnittliche Dauer: %.2f Sekunden%n", currentPlaylist.getAverageDurationSeconds());
+
+        Song shortest = currentPlaylist.getShortestSong();
+        Song longest = currentPlaylist.getLongestSong();
+
+        System.out.println("Kürzester Song: " + (shortest == null ? "-" : shortest));
+        System.out.println("Längster Song: " + (longest == null ? "-" : longest));
     }
 
-    // ---------------------------------------------------------------
-    // HILFSMETHODEN
-    // ---------------------------------------------------------------
-    private static void printTableHeader() {
-        System.out.println("  " + String.format(
-            "[%3s] %-30s | %-20s | %-20s | %s  | %-10s | %s",
-            "ID", "Titel", "Künstler", "Album", "Zeit", "Genre", "Jahr"));
-        System.out.println("  " + "─".repeat(105));
+    private static int getNextGlobalSongId() {
+        int max = 0;
+
+        for (Song song : allSongs) {
+            if (song.getId() > max) {
+                max = song.getId();
+            }
+        }
+
+        return max + 1;
     }
 
-    private static String readNonEmpty(String prompt) {
-        String val = "";
-        while (val.isEmpty()) {             // Schleife mit Validierung
+    private static int readInt(String prompt, int min, int max) {
+        while (true) {
             System.out.print(prompt);
-            val = scanner.nextLine().trim();
-            if (val.isEmpty()) System.out.println("  Darf nicht leer sein!");
-        }
-        return val;
-    }
 
-    private static String readOptional(String prompt) {
-        System.out.print(prompt);
-        return scanner.nextLine().trim();
-    }
+            String input = scanner.nextLine().trim();
 
-    private static int readPositiveInt(String prompt) {
-        while (true) {                      // Schleife mit Fehlerbehandlung
-            System.out.print(prompt);
             try {
-                int v = Integer.parseInt(scanner.nextLine().trim());
-                if (v > 0) return v;
-                System.out.println("  Muss eine positive Zahl sein!");
+                int value = Integer.parseInt(input);
+
+                if (value < min || value > max) {
+                    System.out.println("Bitte eine Zahl zwischen " + min + " und " + max + " eingeben.");
+                    continue;
+                }
+
+                return value;
             } catch (NumberFormatException e) {
-                System.out.println("  Bitte eine ganze Zahl eingeben!");
+                System.out.println("Ungültige Zahl.");
             }
         }
     }
 
-    private static int readIntSafe() {
-        try { return Integer.parseInt(scanner.nextLine().trim()); }
-        catch (NumberFormatException e) { return -1; }
+    private static void addSampleData(Playlist playlist) {
+        if (playlist == null) {
+            throw new IllegalArgumentException("Playlist darf nicht null sein.");
+        }
+
+        Song s1 = new Song(1, "Bohemian Rhapsody", "Queen", "A Night at the Opera", 354, "Rock", 1975);
+        Song s2 = new Song(2, "Blinding Lights", "The Weeknd", "After Hours", 200, "Pop", 2019);
+
+        if (findGlobalSongById(s1.getId()) == null) {
+            allSongs.add(s1);
+        }
+
+        if (findGlobalSongById(s2.getId()) == null) {
+            allSongs.add(s2);
+        }
+
+        playlist.addSong(s1);
+        playlist.addSong(s2);
     }
 
-    /** Beispieldaten für den ersten Start. */
-    private static void addSampleData() {
-        playlist.addSong(new Song(1, "Bohemian Rhapsody",    "Queen",          "A Night at the Opera", 354, "Rock",     1975));
-        playlist.addSong(new Song(2, "Blinding Lights",      "The Weeknd",     "After Hours",          200, "Pop",      2019));
-        playlist.addSong(new Song(3, "Smells Like Teen Spirit","Nirvana",       "Nevermind",            301, "Grunge",   1991));
-        playlist.addSong(new Song(4, "Hotel California",     "Eagles",         "Hotel California",     391, "Rock",     1977));
-        playlist.addSong(new Song(5, "Shape of You",         "Ed Sheeran",     "Divide",               233, "Pop",      2017));
-        System.out.println("  Beispieldaten geladen.");
+    private static Song findGlobalSongById(int id) {
+        for (Song song : allSongs) {
+            if (song.getId() == id) {
+                return song;
+            }
+        }
+
+        return null;
     }
 }
